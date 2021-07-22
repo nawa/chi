@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -1658,7 +1659,11 @@ func TestEscapedURLParams_2(t *testing.T) {
 						}
 
 						for name, expected := range tc.expectedParams {
-							actual := URLParam(r, name)
+							actual, err := url.PathUnescape(URLParam(r, name))
+							if err != nil {
+								t.Fatal(err)
+								return
+							}
 
 							if actual != expected {
 								t.Errorf("wrong parameter value - name: %v, actual: %v, expected: %v", name, actual, expected)
