@@ -7,6 +7,7 @@ package chi
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -371,7 +372,13 @@ func (n *node) FindRoute(rctx *Context, method methodTyp, path string) (*node, e
 
 	// Record the routing params in the request lifecycle
 	rctx.URLParams.Keys = append(rctx.URLParams.Keys, rctx.routeParams.Keys...)
-	rctx.URLParams.Values = append(rctx.URLParams.Values, rctx.routeParams.Values...)
+	for _, val := range rctx.routeParams.Values {
+		unescaped, err := url.PathUnescape(val)
+		if err != nil { // no error is possible here because `path` was escaped before in the code
+			panic(fmt.Sprintf("unexpected value: %s", err.Error()))
+		}
+		rctx.URLParams.Values = append(rctx.URLParams.Values, unescaped)
+	}
 
 	// Record the routing pattern in the request lifecycle
 	if rn.endpoints[method].pattern != "" {

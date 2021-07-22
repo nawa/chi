@@ -420,7 +420,7 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RawPath != "" {
 			routePath = r.URL.RawPath
 		} else {
-			routePath = r.URL.Path
+			routePath = r.URL.EscapedPath()
 		}
 		if routePath == "" {
 			routePath = "/"
