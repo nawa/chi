@@ -3,6 +3,7 @@ package chi
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -76,6 +77,9 @@ type Context struct {
 
 	// methodNotAllowed hint
 	methodNotAllowed bool
+
+	// isRawURL if parsed URL was retrieved from request.URL.RawPath
+	isRawURL bool
 }
 
 // Reset a routing context to its initial state.
@@ -99,7 +103,15 @@ func (x *Context) Reset() {
 func (x *Context) URLParam(key string) string {
 	for k := len(x.URLParams.Keys) - 1; k >= 0; k-- {
 		if x.URLParams.Keys[k] == key {
-			return x.URLParams.Values[k]
+			v := x.URLParams.Values[k]
+			if x.isRawURL {
+				unesc, err := url.PathUnescape(v)
+				if err != nil {
+					panic("incorrect url param: " + err.Error()) // panic is OK here? Seems that this error isn't possible because the value already checked building correct URL()
+				}
+				return unesc
+			}
+			return v
 		}
 	}
 	return ""

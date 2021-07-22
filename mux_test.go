@@ -1590,7 +1590,8 @@ func TestMuxContextIsThreadSafe(t *testing.T) {
 	wg.Wait()
 }
 
-func TestEscapedURLParams(t *testing.T) {
+// Deprecated: included into TestEscapedURLParams
+func TestEscapedURLParams_Deprecated(t *testing.T) {
 	m := NewRouter()
 	m.Get("/api/{identifier}/{region}/{size}/{rotation}/*", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
@@ -1600,7 +1601,7 @@ func TestEscapedURLParams(t *testing.T) {
 			return
 		}
 		identifier := URLParam(r, "identifier")
-		if identifier != "http:%2f%2fexample.com%2fimage.png" {
+		if identifier != "http://example.com/image.png" {
 			t.Errorf("identifier path parameter incorrect %s", identifier)
 			return
 		}
@@ -1627,6 +1628,74 @@ func TestEscapedURLParams(t *testing.T) {
 
 	if _, body := testRequest(t, ts, "GET", "/api/http:%2f%2fexample.com%2fimage.png/full/max/0/color.png", nil); body != "success" {
 		t.Fatalf(body)
+	}
+}
+
+func TestEscapedURLParams(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		pattern        string
+		reqURL         string
+		expectedParams map[string]string
+	}{
+		{pattern: "/api/{param}/*", reqURL: "/api/first%20(second)/first%20(second)", expectedParams: map[string]string{"param": "first (second)", "*": "first (second)"}}, //it is the case of how Chrome escapes URL. Parenthesis aren't escaped
+		{pattern: "/api/{param}/*", reqURL: "/api/first second/first second", expectedParams: map[string]string{"param": "first second", "*": "first second"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first%20second/first%20second", expectedParams: map[string]string{"param": "first second", "*": "first second"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first %20second/first %20second", expectedParams: map[string]string{"param": "first  second", "*": "first  second"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first(second)/first(second)", expectedParams: map[string]string{"param": "first(second)", "*": "first(second)"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first (second)/first (second)", expectedParams: map[string]string{"param": "first (second)", "*": "first (second)"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first%25second/first%25second", expectedParams: map[string]string{"param": "first%second", "*": "first%second"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first%2520second/first%2520second", expectedParams: map[string]string{"param": "first%20second", "*": "first%20second"}},
+		{pattern: "/api/{param}/*", reqURL: "/api/first%2Fsecond/first%2Fsecond", expectedParams: map[string]string{"param": "first/second", "*": "first/second"}},
+		{pattern: "/api/{identifier}/{region}/{size}/{rotation}/*", reqURL: "/api/http:%2f%2fexample.com%2fimage.png/full/max/0/color.png", expectedParams: map[string]string{
+			"identifier": "http://example.com/image.png", "region": "full", "size": "max",
+			"rotation": "0", "*": "color.png",
+		}},
+	} {
+		tc := tc
+
+		t.Run(tc.reqURL, func(t *testing.T) {
+			for method, mt := range methodMap {
+				method := method
+
+				t.Run(method, func(t *testing.T) {
+					m := NewRouter()
+
+					handler := func(w http.ResponseWriter, r *http.Request) {
+						rctx := RouteContext(r.Context())
+						if rctx == nil {
+							t.Error("no context")
+							return
+						}
+
+						for name, expected := range tc.expectedParams {
+							actual := URLParam(r, name)
+
+							if actual != expected {
+								t.Errorf("wrong parameter value - name: %v, actual: %v, expected: %v", name, actual, expected)
+							}
+						}
+					}
+
+					m.handle(mt, tc.pattern, http.HandlerFunc(handler))
+
+					recorder := httptest.NewRecorder()
+					req, err := http.NewRequest(method, tc.reqURL, nil)
+					if err != nil {
+						t.Fatal(err)
+						return
+					}
+
+					m.ServeHTTP(recorder, req)
+
+					if recorder.Code != http.StatusOK {
+						t.Errorf("wrong response status code - actual: %v, expected: %v", recorder.Code, http.StatusOK)
+						return
+					}
+				})
+			}
+		})
 	}
 }
 

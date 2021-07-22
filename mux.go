@@ -419,6 +419,7 @@ func (mx *Mux) routeHTTP(w http.ResponseWriter, r *http.Request) {
 	if routePath == "" {
 		if r.URL.RawPath != "" {
 			routePath = r.URL.RawPath
+			rctx.isRawURL = true
 		} else {
 			routePath = r.URL.Path
 		}
