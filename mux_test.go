@@ -1630,6 +1630,63 @@ func TestEscapedURLParams(t *testing.T) {
 	}
 }
 
+func TestEscapedURLParams_2(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		pattern        string
+		reqURL         string
+		expectedParams map[string]string
+	}{
+		{pattern: "/api/{param}", reqURL: "/api/first%20(second)", expectedParams: map[string]string{"param": "first (second)"}}, // it is the case of how Chrome/Firefox/Safari escape URL. Parenthesis aren't escaped, but Go expects that yes
+		{pattern: "/api/{param}", reqURL: "/api/first%25%20second", expectedParams: map[string]string{"param": "first% second"}}, // usual case when all symbols are escaped
+	} {
+		tc := tc
+
+		t.Run(tc.reqURL, func(t *testing.T) {
+			for method, mt := range methodMap {
+				method := method
+
+				t.Run(method, func(t *testing.T) {
+					m := NewRouter()
+
+					handler := func(w http.ResponseWriter, r *http.Request) {
+						rctx := RouteContext(r.Context())
+						if rctx == nil {
+							t.Error("no context")
+							return
+						}
+
+						for name, expected := range tc.expectedParams {
+							actual := URLParam(r, name)
+
+							if actual != expected {
+								t.Errorf("wrong parameter value - name: %v, actual: %v, expected: %v", name, actual, expected)
+							}
+						}
+					}
+
+					m.handle(mt, tc.pattern, http.HandlerFunc(handler))
+
+					recorder := httptest.NewRecorder()
+					req, err := http.NewRequest(method, tc.reqURL, nil)
+					if err != nil {
+						t.Fatal(err)
+						return
+					}
+
+					m.ServeHTTP(recorder, req)
+
+					if recorder.Code != http.StatusOK {
+						t.Errorf("wrong response status code - actual: %v, expected: %v", recorder.Code, http.StatusOK)
+						return
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCustomHTTPMethod(t *testing.T) {
 	// first we must register this method to be accepted, then we
 	// can define method handlers on the router below
